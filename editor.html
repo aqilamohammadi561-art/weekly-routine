@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Schedule Editor</title>
+<style>
+body{font-family:Segoe UI,sans-serif;padding:20px;background:#fef9c3;}
+h1,h2{text-align:center;margin-bottom:10px;}
+input,button,select{padding:6px;margin:4px;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.card{background:white;padding:10px;border-radius:8px;margin-bottom:15px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+.dayCard{background:white;padding:10px;border-radius:8px;margin-bottom:10px;}
+button.back{padding:6px 10px;margin-bottom:15px;background:#8b5cf6;color:white;border:none;border-radius:6px;cursor:pointer;}
+button.back:hover{opacity:.85;}
+</style>
+</head>
+<body>
+
+<h1>Schedule Editor</h1>
+<button class="back" onclick="window.location.href='index.html'">⬅ Back to Dashboard</button>
+
+<h2>Morning Routine</h2>
+<div id="morningEditor" class="grid"></div>
+<button onclick="addMorningTask()">Add Morning Task</button>
+
+<h2>Daily Schedule</h2>
+<div id="dailyEditor"></div>
+
+<script>
+let morningPlan=JSON.parse(localStorage.getItem("morningPlan"))||[];
+let weeklySchedule=JSON.parse(localStorage.getItem("weeklySchedule"))||{};
+
+// ---------------- Morning Editor ----------------
+const morningEditor=document.getElementById("morningEditor");
+function loadMorningEditor(){
+  morningEditor.innerHTML="";
+  morningPlan.forEach((item,i)=>{
+    let div=document.createElement("div");
+    div.className="card";
+    div.innerHTML=`Start: <input type="time" value="${item.start||''}"> 
+                   End: <input type="time" value="${item.end||''}"><br>
+                   Task: <input value="${item.task}" placeholder="Task"><br>
+                   <button onclick="deleteMorning(${i})">Delete</button>`;
+    morningEditor.appendChild(div);
+  });
+}
+function addMorningTask(){
+  morningPlan.push({start:"",end:"",task:""});
+  loadMorningEditor();
+}
+function deleteMorning(i){
+  morningPlan.splice(i,1);
+  loadMorningEditor();
+}
+function saveMorning(){
+  let cards=morningEditor.querySelectorAll(".card");
+  morningPlan=[];
+  cards.forEach(c=>{
+    const inputs=c.querySelectorAll("input");
+    morningPlan.push({start:inputs[0].value, end:inputs[1].value, task:inputs[2].value});
+  });
+  localStorage.setItem("morningPlan",JSON.stringify(morningPlan));
+}
+
+// ---------------- Daily Editor ----------------
+const dailyEditor=document.getElementById("dailyEditor");
+function loadDailyEditor(){
+  dailyEditor.innerHTML="";
+  const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  days.forEach(day=>{
+    if(!weeklySchedule[day]) weeklySchedule[day]=[];
+    let div=document.createElement("div");
+    div.className="dayCard";
+    div.innerHTML=`<h3>${day}</h3><div id="${day}Tasks"></div>
+                   <button onclick="addDaily('${day}')">Add Task</button>`;
+    dailyEditor.appendChild(div);
+    loadDayTasks(day);
+  });
+}
+
+function loadDayTasks(day){
+  let container=document.getElementById(day+"Tasks");
+  container.innerHTML="";
+  let tasks=weeklySchedule[day];
+  tasks.forEach((item,i)=>{
+    let div=document.createElement("div");
+    div.innerHTML=`Start: <input type="time" value="${item.start||''}"> 
+                   End: <input type="time" value="${item.end||''}"> 
+                   Task: <input value="${item.task}" placeholder="Task">
+                   <button onclick="deleteDaily('${day}',${i})">Delete</button>`;
+    container.appendChild(div);
+  });
+}
+
+function addDaily(day){
+  weeklySchedule[day].push({start:"",end:"",task:""});
+  loadDayTasks(day);
+}
+
+function deleteDaily(day,i){
+  weeklySchedule[day].splice(i,1);
+  loadDayTasks(day);
+}
+
+function saveDaily(){
+  const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  days.forEach(day=>{
+    const container=document.getElementById(day+"Tasks");
+    const divs=container.children;
+    weeklySchedule[day]=[];
+    Array.from(divs).forEach(d=>{
+      const inputs=d.querySelectorAll("input");
+      weeklySchedule[day].push({start:inputs[0].value,end:inputs[1].value,task:inputs[2].value});
+    });
+  });
+  localStorage.setItem("weeklySchedule",JSON.stringify(weeklySchedule));
+}
+
+// ---------------- Initial Load ----------------
+loadMorningEditor();
+loadDailyEditor();
+</script>
+
+<button onclick="saveMorning();saveDaily();">Save All Changes</button>
+
+</body>
+</html>

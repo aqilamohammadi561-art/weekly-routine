@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Study Dashboard</title>
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI,sans-serif;
+  background:linear-gradient(to bottom right,#fef9c3,#fce7f3,#e0f2fe);
+  padding:25px;
+}
+.container{max-width:1100px;margin:auto;}
+h1{text-align:center;font-size:36px;font-weight:800;}
+.clock{text-align:center;margin-bottom:20px;font-size:16px;}
+.progressArea{display:flex;justify-content:center;gap:40px;margin-bottom:30px;}
+.progressCircle{width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.innerCircle{width:85px;height:85px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;}
+.card{background:white;padding:20px;border-radius:15px;margin-bottom:25px;}
+.timelineItem{margin-bottom:10px;}
+.taskBox{display:flex;justify-content:space-between;background:#fdf2f8;padding:10px;border-radius:8px;transition:0.3s;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.gridCard{background:#f3f4f6;padding:10px;border-radius:10px;text-align:center;transition:0.3s;}
+.completed{opacity:.5;text-decoration:line-through;}
+.focusBox{background:#fef3c7;padding:15px;border-radius:10px;text-align:center;font-weight:bold;margin-bottom:15px;}
+button.editDay{
+  width:24px;
+  height:24px;
+  border:none;
+  background:#ec4899;
+  color:white;
+  border-radius:50%;
+  font-size:14px;
+  line-height:24px;
+  text-align:center;
+  cursor:pointer;
+  margin-left:5px;
+  opacity:0.8;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:0.3s;
+}
+button.editDay:hover{
+  transform:scale(1.2);
+  opacity:1;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Weekly Study Dashboard</h1>
+
+<div class="clock" id="clock"></div>
+
+<div class="progressArea">
+  <div>
+    <div class="progressCircle" id="dayCircle">
+      <div class="innerCircle" id="dayPercent">0%</div>
+    </div>
+    <p style="text-align:center">Day Progress</p>
+  </div>
+  <div>
+    <div class="progressCircle" id="taskCircle">
+      <div class="innerCircle" id="taskPercent">0%</div>
+    </div>
+    <p style="text-align:center">Task Progress</p>
+  </div>
+</div>
+
+<div class="card">
+  <div id="focusTask" class="focusBox">Loading...</div>
+</div>
+
+<div class="card">
+  <h2>Morning Routine
+    <button class="editDay" onclick="window.location.href='editor.html'" title="Edit Morning Routine">❤️</button>
+  </h2>
+  <div id="morning"></div>
+</div>
+
+<div class="card" id="dailyCard">
+  <h2 id="todayTitle"></h2>
+  <div id="today" class="grid"></div>
+</div>
+
+<div class="card">
+  <h2>Backup / Restore Tasks</h2>
+  <button onclick="exportData()">Export Tasks</button>
+  <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+  <button onclick="document.getElementById('importFile').click()">Import Tasks</button>
+  <p style="font-size:12px;color:#555;">Exported JSON saves everything. Import it to restore your dashboard.</p>
+</div>
+
+<script>
+// ---------------- Clock ----------------
+function updateClock(){
+  let now=new Date();
+  let text=now.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})+" — "+now.toLocaleTimeString();
+  document.getElementById("clock").innerText=text;
+  let seconds=now.getHours()*3600+now.getMinutes()*60+now.getSeconds();
+  let percent=Math.floor(seconds/86400*100);
+  document.getElementById("dayPercent").innerText=percent+"%";
+  document.getElementById("dayCircle").style.background=`conic-gradient(#8b5cf6 ${percent}%,#e5e7eb ${percent}%)`;
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ---------------- Data ----------------
+let morningPlan=JSON.parse(localStorage.getItem("morningPlan")) || [];
+let weeklySchedule = JSON.parse(localStorage.getItem("weeklySchedule")) || {};
+let checked=JSON.parse(localStorage.getItem("tasks"))||{};
+
+// ---------------- Helper ----------------
+function timeToMinutes(t){
+  if(!t) return 0;
+  let [h,m]=t.split(":").map(Number);
+  return h*60+m;
+}
+function minutesToAMPM(min){
+  let h=Math.floor(min/60);
+  let m=min%60;
+  let ampm=h>=12?"PM":"AM";
+  h=h%12; if(h===0)h=12;
+  return h+":"+String(m).padStart(2,"0")+" "+ampm;
+}
+
+// ---------------- Morning ----------------
+const morningDiv=document.getElementById("morning");
+function loadMorningRoutine(){
+  morningDiv.innerHTML="";
+  morningPlan.forEach((item,i)=>{
+    let key="morning-"+i;
+    let div=document.createElement("div");
+    div.className="timelineItem";
+    let startText = item.start ? minutesToAMPM(timeToMinutes(item.start)) : "—";
+    let endText = item.end ? minutesToAMPM(timeToMinutes(item.end)) : "—";
+    div.innerHTML=`<div class="taskBox"><div>${startText} - ${endText}: ${item.task}</div><input type="checkbox" ${checked[key]?"checked":""}></div>`;
+    let box=div.querySelector(".taskBox");
+    let cb=div.querySelector("input");
+    cb.onchange=()=>{
+      checked[key]=cb.checked;
+      if(cb.checked) box.classList.add("completed"); else box.classList.remove("completed");
+      updateTasks();
+      detectCurrentTask();
+    };
+    if(cb.checked) box.classList.add("completed");
+    morningDiv.appendChild(div);
+  });
+}
+loadMorningRoutine();
+
+// ---------------- Today Tasks ----------------
+function loadTodayTasks(){
+  let todayName=new Date().toLocaleDateString("en-US",{weekday:"long"});
+  document.getElementById("todayTitle").innerText=todayName+" Execution Zone";
+  let tasks=weeklySchedule[todayName]||[];
+  let grid=document.getElementById("today");
+  grid.innerHTML="";
+  tasks.forEach((item,i)=>{
+    let key=todayName+"-"+i;
+    let div=document.createElement("div");
+    div.className="gridCard";
+    let startText = item.start ? minutesToAMPM(timeToMinutes(item.start)) : "—";
+    let endText = item.end ? minutesToAMPM(timeToMinutes(item.end)) : "—";
+    div.innerHTML=`<div>${startText} - ${endText}</div><div>${item.task}</div><input type="checkbox" ${checked[key]?"checked":""}>`;
+    let cb=div.querySelector("input");
+    cb.onchange=()=>{
+      checked[key]=cb.checked;
+      if(cb.checked) div.classList.add("completed"); else div.classList.remove("completed");
+      updateTasks();
+      detectCurrentTask();
+    };
+    if(cb.checked) div.classList.add("completed");
+    grid.appendChild(div);
+  });
+}
+loadTodayTasks();
+
+// ---------------- Progress ----------------
+function updateTasks(){
+  localStorage.setItem("tasks",JSON.stringify(checked));
+  let total=document.querySelectorAll("input").length;
+  let done=Object.values(checked).filter(v=>v).length;
+  let percent=Math.floor(done/total*100)||0;
+  document.getElementById("taskPercent").innerText=percent+"%";
+  document.getElementById("taskCircle").style.background=`conic-gradient(#ec4899 ${percent}%,#e5e7eb ${percent}%)`;
+}
+
+// ---------------- Current Focus ----------------
+function detectCurrentTask(){
+  let now=new Date();
+  let current=now.getHours()*60+now.getMinutes();
+  let todayName=new Date().toLocaleDateString("en-US",{weekday:"long"});
+  let allTasks=[...morningPlan,...(weeklySchedule[todayName]||[])];
+  for(let i=0;i<allTasks.length;i++){
+    let t=allTasks[i];
+    let key = i < morningPlan.length ? "morning-"+i : todayName+"-"+(i - morningPlan.length);
+    if(checked[key]) continue;
+    let s = t.start ? timeToMinutes(t.start) : 0;
+    let e = t.end ? timeToMinutes(t.end) : 0;
+    if(current>=s && current<=e){
+      let startText = minutesToAMPM(s);
+      let endText = minutesToAMPM(e);
+      document.getElementById("focusTask").innerText="Now: "+t.task+" ("+startText+" - "+endText+")";
+      return;
+    }
+  }
+  document.getElementById("focusTask").innerText="Free Time 🌿";
+}
+setInterval(detectCurrentTask,60000);
+detectCurrentTask();
+
+// ---------------- Export / Import ----------------
+function exportData(){
+  const data={
+    morningPlan: morningPlan,
+    weeklySchedule: weeklySchedule,
+    tasks: checked
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="study_dashboard_backup.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(data.morningPlan) morningPlan = data.morningPlan;
+      if(data.weeklySchedule) weeklySchedule = data.weeklySchedule;
+      if(data.tasks) checked = data.tasks;
+      localStorage.setItem("morningPlan", JSON.stringify(morningPlan));
+      localStorage.setItem("weeklySchedule", JSON.stringify(weeklySchedule));
+      localStorage.setItem("tasks", JSON.stringify(checked));
+      loadMorningRoutine();
+      loadTodayTasks();
+      updateTasks();
+      detectCurrentTask();
+      alert("Data restored successfully!");
+    }catch(err){
+      alert("Invalid file or format.");
+    }
+  }
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
